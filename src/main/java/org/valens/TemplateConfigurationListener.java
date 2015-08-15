@@ -19,6 +19,7 @@ import com.atlassian.bamboo.build.SimpleLogEntry;
 import com.atlassian.bamboo.chains.Chain;
 import com.atlassian.bamboo.chains.ChainStage;
 import com.atlassian.bamboo.chains.cache.ImmutableChainStage;
+import com.atlassian.bamboo.event.ServerStartedEvent;
 import com.atlassian.bamboo.fieldvalue.BuildDefinitionConverter;
 import com.atlassian.bamboo.fieldvalue.TaskConfigurationUtils;
 import com.atlassian.bamboo.plan.PlanHelper;
@@ -124,7 +125,7 @@ public class TemplateConfigurationListener implements HibernateEventListener
             @Override
             public Object doInTransaction()
             {
-                if (event instanceof BuildConfigurationUpdatedEvent)
+                if (event instanceof BuildConfigurationUpdatedEvent  )
                 {
                     BuildConfigurationUpdatedEvent buildConfigurationUpdatedEvent = (BuildConfigurationUpdatedEvent) event;
 
