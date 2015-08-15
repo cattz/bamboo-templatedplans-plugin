@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<atlassian-plugin key="${project.groupId}.${project.artifactId}" name="${project.name}" plugins-version="2">
+    <plugin-info>
+        <description>${project.description}</description>
+        <version>${project.version}</version>
+        <vendor name="${project.organization.name}" url="${project.organization.url}"/>
+        <param name="atlassian-licensing-enabled">false</param>
+        <param name="plugin-icon">images/pluginIcon.png</param>
+        <param name="plugin-logo">images/pluginLogo.png</param>
+    </plugin-info>
+    <!-- add our i18n resource -->
+    <resource type="i18n" name="i18n" location="templateVars"/>
+    <!-- add our web resources -->
+    <web-resource key="templateVars-resources" name="templateVars Web Resources">
+        <dependency>com.atlassian.auiplugin:ajs</dependency>
+        <resource type="download" name="templateVars.css" location="/css/templateVars.css"/>
+        <resource type="download" name="templateVars.js" location="/js/templateVars.js"/>
+        <resource type="download" name="images/" location="/images"/>
+        <context>templateVars</context>
+    </web-resource>
+        
+    <bambooEventListener key="templateNotificationListener" name="Build Template Listener"
+               class="org.valens.TemplateConfigurationListener">
+        <description>Build Template Listener.</description>
+    </bambooEventListener>
+    
+    <additionalBuildConfigurationPlugin key="templatedBuildConfig" name="Templated Build Configuration"
+        class="org.valens.TemplateConfigurator">
+        <description>Plugin to template a plan</description>
+        <resource type="freemarker" name="edit" location="preTemplateEdit.ftl"/>
+        <resource type="freemarker" name="view" location="preTemplateView.ftl"/>
+    </additionalBuildConfigurationPlugin> 
+  
+    <!-- import from the product container -->
+    <component-import key="planManager" interface="com.atlassian.bamboo.plan.PlanManager" />
+    <component-import key="chainCreationService" interface="com.atlassian.bamboo.build.creation.ChainCreationService"/>
+    <component-import key="jobCreationService" interface="com.atlassian.bamboo.build.creation.JobCreationService"/>
+    <component-import key="projectManager" interface="com.atlassian.bamboo.project.ProjectManager"/>
+    <component-import key="buildDefinitionManager" interface="com.atlassian.bamboo.build.BuildDefinitionManager" />
+    <component-import key="deletionService" interface="com.atlassian.bamboo.deletion.DeletionService" />
+    <component-import key="repositoryDefinitionManager" interface="com.atlassian.bamboo.repository.RepositoryDefinitionManager" />
+    <component-import key="credentialsManager" interface="com.atlassian.bamboo.credentials.CredentialsManager" />
+    <component-import key="transactionTemplate" interface="com.atlassian.sal.api.transaction.TransactionTemplate" />
+    <component-import key="buildStrategyConfigurationService" interface="com.atlassian.bamboo.build.strategy.BuildStrategyConfigurationService" />
+    <component-import key="variableDefinitionManager" interface="com.atlassian.bamboo.variable.VariableDefinitionManager" />
+
+    
+</atlassian-plugin>

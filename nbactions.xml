@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<actions>
+        <action>
+            <actionName>CUSTOM-install</actionName>
+            <displayName>install</displayName>
+            <goals>
+                <goal>com.atlassian.maven.plugins:maven-amps-dispatcher-plugin:5.0.13:install</goal>
+            </goals>
+            <properties>
+                <server>localhost</server>
+                <username>admin</username>
+                <password>admin</password>
+                <http.port>8085</http.port>
+                <context.path></context.path>
+                <plugin-key>bamboo-templatedplans-plugin</plugin-key>
+            </properties>
+        </action>
+    </actions>
