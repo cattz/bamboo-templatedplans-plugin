@@ -78,6 +78,7 @@ public class TemplateConfigurationListener implements HibernateEventListener
     private String SELECTED_TEMPLATE_ARTIFACTS = "custom.bamboo.template.artifacts";
     private String SELECTED_TEMPLATE_STATES = "custom.bamboo.template.states";
     private String SELECTED_TEMPLATE_REQUIREMENTS = "custom.bamboo.template.requirements";
+    private String SELECTED_TEMPLATE_CONFIG = "custom.bamboo.template.config";
 
     protected static final Logger log = LoggerFactory.getLogger(TemplateConfigurationListener.class);
     private PlanManager planManager;
@@ -86,19 +87,9 @@ public class TemplateConfigurationListener implements HibernateEventListener
     private TransactionTemplate transactionTemplate;
     private TaskConfigurationService taskConfigurationService;
     private BuildDefinitionManager buildDefinitionManager;
-    private DashboardCachingManager dashboardCachingManager;
     private ArtifactDefinitionManager artifactDefinitionManager;
     private RepositoryConfigurationService repositoryConfigurationService;
-
-    public RepositoryConfigurationService getRepositoryConfigurationService()
-    {
-        return repositoryConfigurationService;
-    }
-
-    public void setRepositoryConfigurationService(RepositoryConfigurationService repositoryConfigurationService)
-    {
-        this.repositoryConfigurationService = repositoryConfigurationService;
-    }
+    private DashboardCachingManager dashboardCachingManager;
 
     private ArtifactDefinition convertDefinition(ArtifactDefinition artifactDefinition, Job job)
     {
@@ -132,204 +123,235 @@ public class TemplateConfigurationListener implements HibernateEventListener
         };
     }
 
-    @Override
-    public void handleEvent(final Event event)
+    private void doReplication()
     {
-
-        transactionTemplate.execute(new TransactionCallback<Object>()
+        for (ImmutableTopLevelPlan p : cachedPlanManager.getPlans(ImmutableTopLevelPlan.class))
         {
-            @Override
-            public Object doInTransaction()
+
+            ImmutableChain planChain = (ImmutableChain) p;
+            for (ImmutableChainStage stage : planChain.getAllStages())
             {
-                if (event instanceof BuildConfigurationUpdatedEvent)
+                for (ImmutableJob immutableJob : stage.getJobs())
                 {
-                    BuildConfigurationUpdatedEvent buildConfigurationUpdatedEvent = (BuildConfigurationUpdatedEvent) event;
-
-                    String key = buildConfigurationUpdatedEvent.getBuildPlanKey();
-                    log.debug("Received BuildConfigurationUpdatedEvent  " + key);
-
-                    for (ImmutableTopLevelPlan p : cachedPlanManager.getPlans(ImmutableTopLevelPlan.class))
+                    Job job = (Job) planManager.getPlanByKey(immutableJob.getKey());
+                    Map<String, String> customConfiguration = job.getBuildDefinition().getCustomConfiguration();
+                    if (customConfiguration.containsKey(SELECTED_TEMPLATE) && customConfiguration.get(SELECTED_TEMPLATE).contains("="))
                     {
 
-                        ImmutableChain planChain = (ImmutableChain) p;
-                        for (ImmutableChainStage stage : planChain.getAllStages())
+                        boolean stateTask = true;
+                        if (customConfiguration.get(SELECTED_TEMPLATE_TASK) == null || customConfiguration.get(SELECTED_TEMPLATE_TASK).toString().equalsIgnoreCase("false"))
                         {
-                            for (ImmutableJob immutableJob : stage.getJobs())
+                            stateTask = false;
+                        }
+
+                        boolean stateArtifacts = true;
+                        if (customConfiguration.get(SELECTED_TEMPLATE_ARTIFACTS) == null || customConfiguration.get(SELECTED_TEMPLATE_ARTIFACTS).toString().equalsIgnoreCase("false"))
+                        {
+                            stateArtifacts = false;
+                        }
+
+                        boolean stateStates = true;
+                        if (customConfiguration.get(SELECTED_TEMPLATE_STATES) == null || customConfiguration.get(SELECTED_TEMPLATE_STATES).toString().equalsIgnoreCase("false"))
+                        {
+                            stateStates = false;
+                        }
+
+                        boolean stateRequirements = true;
+                        if (customConfiguration.get(SELECTED_TEMPLATE_REQUIREMENTS) == null || customConfiguration.get(SELECTED_TEMPLATE_REQUIREMENTS).toString().equalsIgnoreCase("false"))
+                        {
+                            stateRequirements = false;
+                        }
+
+                        boolean config = true;
+                        if (customConfiguration.get(SELECTED_TEMPLATE_CONFIG) == null || customConfiguration.get(SELECTED_TEMPLATE_CONFIG).toString().equalsIgnoreCase("false"))
+                        {
+                            config = false;
+                        }
+
+                        String selectedKey = (customConfiguration.get(SELECTED_TEMPLATE).toString().split("=")[1]);
+
+                        log.warn("Found a plan ( " + job.getKey() + " ) that has a template " + selectedKey);
+
+                        String[] tokens = selectedKey.split("-");
+                        String templateKey = tokens[0] + "-" + tokens[1];
+
+                        PlanKey planKey = PlanKeys.getPlanKey(templateKey);
+
+                        Chain templateChain = (Chain) planManager.getPlanByKey(planKey);
+
+                        for (ChainStage chainTemplateStage : templateChain.getStages())
+                        {
+                            for (Job templateJob : chainTemplateStage.getJobs())
                             {
-                                Job job = (Job) planManager.getPlanByKey(immutableJob.getKey());
-                                Map<String, String> customConfiguration = job.getBuildDefinition().getCustomConfiguration();
-                                if (customConfiguration.containsKey(SELECTED_TEMPLATE) && customConfiguration.get(SELECTED_TEMPLATE).contains("="))
+                                if (selectedKey.trim().equalsIgnoreCase(templateJob.getKey().trim()))
                                 {
+                                    BuildDefinition bd = job.getBuildDefinition();
 
-                                    boolean stateTask = true;
-                                    if (customConfiguration.get(SELECTED_TEMPLATE_TASK) == null || customConfiguration.get(SELECTED_TEMPLATE_TASK).toString().equalsIgnoreCase("false"))
+                                    List<TaskDefinition> tasks = bd.getTaskDefinitions();
+                                    List<TaskDefinition> newTasks = new LinkedList<TaskDefinition>();
+                                    List<TaskDefinition> lst = templateJob.getBuildDefinition().getTaskDefinitions();
+
+                                    RequirementSet rs = new RequirementSetImpl();
+
+                                    RequirementSet requirementSetToClone = job.getRequirementSet();
+                                    for (Requirement requirement : requirementSetToClone.getRequirements())
                                     {
-                                        stateTask = false;
-                                    }
-
-                                    boolean stateArtifacts = true;
-                                    if (customConfiguration.get(SELECTED_TEMPLATE_ARTIFACTS) == null || customConfiguration.get(SELECTED_TEMPLATE_ARTIFACTS).toString().equalsIgnoreCase("false"))
-                                    {
-                                        stateArtifacts = false;
-                                    }
-
-                                    boolean stateStates = true;
-                                    if (customConfiguration.get(SELECTED_TEMPLATE_STATES) == null || customConfiguration.get(SELECTED_TEMPLATE_STATES).toString().equalsIgnoreCase("false"))
-                                    {
-                                        stateStates = false;
-                                    }
-                                    
-                                    boolean stateRequirements = true;
-                                    if (customConfiguration.get(SELECTED_TEMPLATE_REQUIREMENTS) == null || customConfiguration.get(SELECTED_TEMPLATE_REQUIREMENTS).toString().equalsIgnoreCase("false"))
-                                    {
-                                        stateRequirements = false;
-                                    }
-
-                                    String selectedKey = (customConfiguration.get(SELECTED_TEMPLATE).toString().split("=")[1]);
-
-                                    log.warn("Found a plan ( " + job.getKey() + " ) that has a template " + selectedKey);
-
-                                    String[] tokens = selectedKey.split("-");
-                                    String templateKey = tokens[0] + "-" + tokens[1];
-
-                                    PlanKey planKey = PlanKeys.getPlanKey(templateKey);
-
-                                    Chain templateChain = (Chain) planManager.getPlanByKey(planKey);
-
-                                    for (ChainStage chainTemplateStage : templateChain.getStages())
-                                    {
-                                        for (Job templateJob : chainTemplateStage.getJobs())
+                                        if (requirement.getOwnerId() == -1 && stateRequirements)
                                         {
-                                            if (selectedKey.trim().equalsIgnoreCase(templateJob.getKey().trim()))
+                                            RequirementImpl newRequirement = new RequirementImpl(requirement.getKey(), requirement.isRegexMatch(), requirement.getMatchValue(), requirement.isReadonly());
+                                            rs.addRequirement(newRequirement);
+                                        }
+                                    }
+
+                                    log.warn("Tasks size: " + lst.size());
+
+                                    if (lst.size() > 0 && stateTask)
+                                    {
+
+                                        HashMap<String, Boolean> stateCache = new HashMap<String, Boolean>();
+                                        for (TaskDefinition t : tasks)
+
+                                        {
+                                            if (t.getPluginKey().contains("task.vcs.checkout"))
                                             {
-                                                BuildDefinition bd = job.getBuildDefinition();
+                                                long taskId = TaskConfigurationUtils.getUniqueId(newTasks);
+                                                TaskDefinition auxtask = new TaskDefinitionImpl(taskId,
+                                                        t.getPluginKey(),
+                                                        t.getUserDescription(),
+                                                        t.isEnabled(),
+                                                        t.getConfiguration());
 
-                                                List<TaskDefinition> tasks = bd.getTaskDefinitions();
-                                                List<TaskDefinition> newTasks = new LinkedList<TaskDefinition>();
-                                                List<TaskDefinition> lst = templateJob.getBuildDefinition().getTaskDefinitions();
+                                                auxtask.setFinalising(t.isFinalising());
 
-                                                RequirementSet rs = new RequirementSetImpl();
+                                                newTasks.add(auxtask);
+                                            }
 
-                                                RequirementSet requirementSetToClone = job.getRequirementSet();
-                                                for (Requirement requirement : requirementSetToClone.getRequirements())
+                                            stateCache.put(t.getUserDescription(), t.isEnabled());
+                                        }
+
+                                        for (TaskDefinition t : lst)
+                                        {
+                                            if (!t.getPluginKey().contains("task.vcs.checkout"))
+                                            {
+                                                long taskId = TaskConfigurationUtils.getUniqueId(newTasks);
+
+                                                boolean b = t.isEnabled();
+                                                if (stateStates && t.getUserDescription() != null
+                                                        && t.getUserDescription().length() > 0 && stateCache.get(t.getUserDescription()) != null)
                                                 {
-                                                    if (requirement.getOwnerId() == -1 && stateRequirements)
+                                                    b = stateCache.get(t.getUserDescription());
+                                                }
+
+                                                TaskDefinition auxtask = new TaskDefinitionImpl(taskId,
+                                                        t.getPluginKey(),
+                                                        t.getUserDescription(),
+                                                        b,
+                                                        t.getConfiguration());
+
+                                                auxtask.setFinalising(t.isFinalising());
+
+                                                for (Requirement requirement : templateJob.getRequirementSet().getRequirements())
+                                                {
+                                                    if (requirement.getOwnerId() == t.getId())
                                                     {
                                                         RequirementImpl newRequirement = new RequirementImpl(requirement.getKey(), requirement.isRegexMatch(), requirement.getMatchValue(), requirement.isReadonly());
+                                                        newRequirement.setOwnerId(taskId);
+
                                                         rs.addRequirement(newRequirement);
                                                     }
                                                 }
 
-                                                log.warn("Tasks size: " + lst.size());
+                                                log.debug("Generated new task: " + auxtask.toString());
 
-                                                if (lst.size() > 0 && stateTask)
-                                                {
-
-                                                    HashMap<String, Boolean> stateCache = new HashMap<String, Boolean>();
-                                                    for (TaskDefinition t : tasks)
-
-                                                    {
-                                                        if (t.getPluginKey().contains("task.vcs.checkout"))
-                                                        {
-                                                            long taskId = TaskConfigurationUtils.getUniqueId(newTasks);
-                                                            TaskDefinition auxtask = new TaskDefinitionImpl(taskId,
-                                                                    t.getPluginKey(),
-                                                                    t.getUserDescription(),
-                                                                    t.isEnabled(),
-                                                                    t.getConfiguration());
-
-                                                            auxtask.setFinalising(t.isFinalising());
-
-                                                            newTasks.add(auxtask);
-                                                        }
-
-                                                        stateCache.put(t.getUserDescription(), t.isEnabled());
-                                                    }
-
-                                                    for (TaskDefinition t : lst)
-                                                    {
-                                                        if (!t.getPluginKey().contains("task.vcs.checkout"))
-                                                        {
-                                                            long taskId = TaskConfigurationUtils.getUniqueId(newTasks);
-
-                                                            boolean b = t.isEnabled();
-                                                            if (stateStates && t.getUserDescription() != null
-                                                                    && t.getUserDescription().length() > 0 && stateCache.get(t.getUserDescription()) != null)
-                                                            {
-                                                                b = stateCache.get(t.getUserDescription());
-                                                            }
-
-                                                            TaskDefinition auxtask = new TaskDefinitionImpl(taskId,
-                                                                    t.getPluginKey(),
-                                                                    t.getUserDescription(),
-                                                                    b,
-                                                                    t.getConfiguration());
-
-                                                            auxtask.setFinalising(t.isFinalising());
-
-                                                            for (Requirement requirement : templateJob.getRequirementSet().getRequirements())
-                                                            {
-                                                                if (requirement.getOwnerId() == t.getId())
-                                                                {
-                                                                    RequirementImpl newRequirement = new RequirementImpl(requirement.getKey(), requirement.isRegexMatch(), requirement.getMatchValue(), requirement.isReadonly());
-                                                                    newRequirement.setOwnerId(taskId);
-
-                                                                    rs.addRequirement(newRequirement);
-                                                                }
-                                                            }
-
-                                                            log.debug("Generated new task: " + auxtask.toString());
-
-                                                            newTasks.add(auxtask);
-                                                        }
-                                                    }
-
-                                                    requirementSetToClone = templateJob.getRequirementSet();
-                                                    for (Requirement requirement : requirementSetToClone.getRequirements())
-                                                    {
-                                                        if (requirement.getOwnerId() == -1)
-                                                        {
-                                                            RequirementImpl newRequirement = new RequirementImpl(requirement.getKey(), requirement.isRegexMatch(), requirement.getMatchValue(), requirement.isReadonly());
-                                                            rs.addRequirement(newRequirement);
-                                                        }
-                                                    }
-
-                                                    for (Requirement requirement : rs.getRequirements())
-                                                    {
-                                                        log.debug("Requirement list: " + requirement);
-                                                    }
-
-                                                    job.setRequirementSet(rs);
-                                                    bd.setTaskDefinitions(newTasks);
-                                                    buildDefinitionManager.savePlanAndDefinition(job, bd);
-                                                    planManager.savePlan(job);
-                                                    log.warn("Final Task List Size: " + newTasks.size());
-                                                }
-
-                                                if (templateJob.getArtifactDefinitions().size() > 0 && stateArtifacts)
-                                                {
-                                                    artifactDefinitionManager.removeArtifactDefinitionsByPlan(job);
-
-                                                    List<ArtifactDefinition> artifacts = new ArrayList<ArtifactDefinition>();
-                                                    for (ArtifactDefinition artifact : templateJob.getArtifactDefinitions())
-                                                    {
-                                                        artifacts.add(convertDefinition(artifact, job));
-                                                    }
-
-                                                    artifactDefinitionManager.saveArtifactDefinitions(artifacts);
-                                                }
-
+                                                newTasks.add(auxtask);
                                             }
                                         }
+
+                                        requirementSetToClone = templateJob.getRequirementSet();
+                                        for (Requirement requirement : requirementSetToClone.getRequirements())
+                                        {
+                                            if (requirement.getOwnerId() == -1)
+                                            {
+                                                RequirementImpl newRequirement = new RequirementImpl(requirement.getKey(), requirement.isRegexMatch(), requirement.getMatchValue(), requirement.isReadonly());
+                                                rs.addRequirement(newRequirement);
+                                            }
+                                        }
+                                                   
+                                        if (config)
+                                        {
+                                            logMap(templateJob.getBuildDefinition().getCustomConfiguration());
+                                            
+                                            for (String s : templateJob.getBuildDefinition().getCustomConfiguration().keySet())
+                                            {
+                                                if (!s.contains("custom.bamboo.template"))
+                                                {
+                                                    
+                                                    String value = templateJob.getBuildDefinition().getCustomConfiguration().get(s);
+                                                    bd.getCustomConfiguration().put(s, value);
+                                                }
+                                            }
+                                            
+                                            logMap(job.getBuildDefinition().getCustomConfiguration());
+                                        }
+
+                                        
+                                        
+                                        for (Requirement requirement : rs.getRequirements())
+                                        {
+                                            log.debug("Requirement list: " + requirement);
+                                        }
+
+                                        job.setRequirementSet(rs);
+                                        bd.setTaskDefinitions(newTasks);
+                                        buildDefinitionManager.savePlanAndDefinition(job, bd);
+                                        planManager.savePlan(job);
+                                        dashboardCachingManager.updatePlanCache(job.getPlanKey());
+                                        log.warn("Final Task List Size: " + newTasks.size());
                                     }
+
+                                    if (templateJob.getArtifactDefinitions().size() > 0 && stateArtifacts)
+                                    {
+                                        artifactDefinitionManager.removeArtifactDefinitionsByPlan(job);
+
+                                        List<ArtifactDefinition> artifacts = new ArrayList<ArtifactDefinition>();
+                                        for (ArtifactDefinition artifact : templateJob.getArtifactDefinitions())
+                                        {
+                                            artifacts.add(convertDefinition(artifact, job));
+                                        }
+
+                                        artifactDefinitionManager.saveArtifactDefinitions(artifacts);
+                                    }
+
                                 }
                             }
                         }
                     }
                 }
-                return null;
             }
-        });
+        }
+    }
+
+    @Override
+    public void handleEvent(final Event event)
+    {
+
+        if (event instanceof BuildConfigurationUpdatedEvent)
+        {
+            BuildConfigurationUpdatedEvent buildConfigurationUpdatedEvent = (BuildConfigurationUpdatedEvent) event;
+
+            String key = buildConfigurationUpdatedEvent.getBuildPlanKey();
+            log.debug("Received BuildConfigurationUpdatedEvent  " + key);
+            transactionTemplate.execute(new TransactionCallback<Object>()
+            {
+                @Override
+                public Object doInTransaction()
+                {
+                    doReplication();
+                    return null;
+                }
+            });
+        }
+
     }
 
     public PlanManager getPlanManager()
@@ -404,5 +426,25 @@ public class TemplateConfigurationListener implements HibernateEventListener
     public void setArtifactDefinitionManager(ArtifactDefinitionManager artifactDefinitionManager)
     {
         this.artifactDefinitionManager = artifactDefinitionManager;
+    }
+    
+    public DashboardCachingManager getDashboardCachingManager()
+    {
+        return dashboardCachingManager;
+    }
+
+    public void setDashboardCachingManager(DashboardCachingManager dashboardCachingManager)
+    {
+        this.dashboardCachingManager = dashboardCachingManager;
+    }
+
+    public RepositoryConfigurationService getRepositoryConfigurationService()
+    {
+        return repositoryConfigurationService;
+    }
+
+    public void setRepositoryConfigurationService(RepositoryConfigurationService repositoryConfigurationService)
+    {
+        this.repositoryConfigurationService = repositoryConfigurationService;
     }
 }

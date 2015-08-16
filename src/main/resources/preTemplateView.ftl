@@ -15,5 +15,9 @@
         [@ww.label label='Template Requirements Definition' ]
             [@ww.param name='value']${build.buildDefinition.customConfiguration.get('custom.bamboo.template.requirements')?if_exists}[/@ww.param]
         [/@ww.label]
+
+        [@ww.label label='Template Configuration Definition' ]
+            [@ww.param name='value']${build.buildDefinition.customConfiguration.get('custom.bamboo.template.config')?if_exists}[/@ww.param]
+        [/@ww.label]
     [/@ui.bambooInfoDisplay]
 [/#if]

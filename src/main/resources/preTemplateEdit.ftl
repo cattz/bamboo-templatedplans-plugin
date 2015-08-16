@@ -11,6 +11,8 @@
 
     [@ww.checkbox label='Merge Job Requirements' name='custom.bamboo.template.requirements' toggle='true' description='Attempt to merge the 2 job requirements, otherwise it will simple overwrite from template' /]
 
+    [@ww.checkbox label='Merge Job Misc Configuration' name='custom.bamboo.template.config' toggle='true' description='Attempt to merge the 2 job misc configurations' /]
+
 
 [/@ui.bambooSection ]
 
