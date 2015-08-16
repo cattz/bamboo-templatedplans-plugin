@@ -11,5 +11,9 @@
         [@ww.label label='Template Artifact Definition' ]
             [@ww.param name='value']${build.buildDefinition.customConfiguration.get('custom.bamboo.template.artifacts')?if_exists}[/@ww.param]
         [/@ww.label]
+
+        [@ww.label label='Template Requirements Definition' ]
+            [@ww.param name='value']${build.buildDefinition.customConfiguration.get('custom.bamboo.template.requirements')?if_exists}[/@ww.param]
+        [/@ww.label]
     [/@ui.bambooInfoDisplay]
 [/#if]

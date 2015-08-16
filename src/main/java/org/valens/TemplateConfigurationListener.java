@@ -14,7 +14,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-
 package org.valens;
 
 import com.atlassian.bamboo.event.BambooErrorEvent;
@@ -28,6 +27,7 @@ import com.atlassian.bamboo.build.BuildDefinitionManager;
 import com.atlassian.bamboo.build.BuildLoggerManager;
 import com.atlassian.bamboo.build.Job;
 import com.atlassian.bamboo.build.SimpleLogEntry;
+import com.atlassian.bamboo.caching.DashboardCachingManager;
 import com.atlassian.bamboo.chains.Chain;
 import com.atlassian.bamboo.chains.ChainStage;
 import com.atlassian.bamboo.chains.cache.ImmutableChainStage;
@@ -49,6 +49,10 @@ import com.atlassian.bamboo.task.TaskConfigurationService;
 import com.atlassian.bamboo.task.TaskDefinition;
 import com.atlassian.bamboo.task.TaskDefinitionImpl;
 import com.atlassian.bamboo.task.TaskManager;
+import com.atlassian.bamboo.v2.build.agent.capability.Requirement;
+import com.atlassian.bamboo.v2.build.agent.capability.RequirementImpl;
+import com.atlassian.bamboo.v2.build.agent.capability.RequirementSet;
+import com.atlassian.bamboo.v2.build.agent.capability.RequirementSetImpl;
 import com.atlassian.event.Event;
 import com.atlassian.sal.api.transaction.TransactionCallback;
 import com.atlassian.sal.api.transaction.TransactionTemplate;
@@ -73,16 +77,16 @@ public class TemplateConfigurationListener implements HibernateEventListener
     private String SELECTED_TEMPLATE_TASK = "custom.bamboo.template.task";
     private String SELECTED_TEMPLATE_ARTIFACTS = "custom.bamboo.template.artifacts";
     private String SELECTED_TEMPLATE_STATES = "custom.bamboo.template.states";
-    
+    private String SELECTED_TEMPLATE_REQUIREMENTS = "custom.bamboo.template.requirements";
+
     protected static final Logger log = LoggerFactory.getLogger(TemplateConfigurationListener.class);
     private PlanManager planManager;
     private CachedPlanManager cachedPlanManager;
     private BuildDefinitionConverter buildDefinitionConverter;
     private TransactionTemplate transactionTemplate;
-    private TaskManager taskManager;
     private TaskConfigurationService taskConfigurationService;
     private BuildDefinitionManager buildDefinitionManager;
-    
+    private DashboardCachingManager dashboardCachingManager;
     private ArtifactDefinitionManager artifactDefinitionManager;
     private RepositoryConfigurationService repositoryConfigurationService;
 
@@ -137,7 +141,7 @@ public class TemplateConfigurationListener implements HibernateEventListener
             @Override
             public Object doInTransaction()
             {
-                if (event instanceof BuildConfigurationUpdatedEvent  )
+                if (event instanceof BuildConfigurationUpdatedEvent)
                 {
                     BuildConfigurationUpdatedEvent buildConfigurationUpdatedEvent = (BuildConfigurationUpdatedEvent) event;
 
@@ -168,11 +172,17 @@ public class TemplateConfigurationListener implements HibernateEventListener
                                     {
                                         stateArtifacts = false;
                                     }
-                                    
+
                                     boolean stateStates = true;
                                     if (customConfiguration.get(SELECTED_TEMPLATE_STATES) == null || customConfiguration.get(SELECTED_TEMPLATE_STATES).toString().equalsIgnoreCase("false"))
                                     {
                                         stateStates = false;
+                                    }
+                                    
+                                    boolean stateRequirements = true;
+                                    if (customConfiguration.get(SELECTED_TEMPLATE_REQUIREMENTS) == null || customConfiguration.get(SELECTED_TEMPLATE_REQUIREMENTS).toString().equalsIgnoreCase("false"))
+                                    {
+                                        stateRequirements = false;
                                     }
 
                                     String selectedKey = (customConfiguration.get(SELECTED_TEMPLATE).toString().split("=")[1]);
@@ -193,9 +203,22 @@ public class TemplateConfigurationListener implements HibernateEventListener
                                             if (selectedKey.trim().equalsIgnoreCase(templateJob.getKey().trim()))
                                             {
                                                 BuildDefinition bd = job.getBuildDefinition();
+
                                                 List<TaskDefinition> tasks = bd.getTaskDefinitions();
                                                 List<TaskDefinition> newTasks = new LinkedList<TaskDefinition>();
                                                 List<TaskDefinition> lst = templateJob.getBuildDefinition().getTaskDefinitions();
+
+                                                RequirementSet rs = new RequirementSetImpl();
+
+                                                RequirementSet requirementSetToClone = job.getRequirementSet();
+                                                for (Requirement requirement : requirementSetToClone.getRequirements())
+                                                {
+                                                    if (requirement.getOwnerId() == -1 && stateRequirements)
+                                                    {
+                                                        RequirementImpl newRequirement = new RequirementImpl(requirement.getKey(), requirement.isRegexMatch(), requirement.getMatchValue(), requirement.isReadonly());
+                                                        rs.addRequirement(newRequirement);
+                                                    }
+                                                }
 
                                                 log.warn("Tasks size: " + lst.size());
 
@@ -208,7 +231,7 @@ public class TemplateConfigurationListener implements HibernateEventListener
                                                     {
                                                         if (t.getPluginKey().contains("task.vcs.checkout"))
                                                         {
-                                                            long taskId = TaskConfigurationUtils.getUniqueId(tasks);
+                                                            long taskId = TaskConfigurationUtils.getUniqueId(newTasks);
                                                             TaskDefinition auxtask = new TaskDefinitionImpl(taskId,
                                                                     t.getPluginKey(),
                                                                     t.getUserDescription(),
@@ -219,7 +242,7 @@ public class TemplateConfigurationListener implements HibernateEventListener
 
                                                             newTasks.add(auxtask);
                                                         }
-                                                        
+
                                                         stateCache.put(t.getUserDescription(), t.isEnabled());
                                                     }
 
@@ -227,13 +250,15 @@ public class TemplateConfigurationListener implements HibernateEventListener
                                                     {
                                                         if (!t.getPluginKey().contains("task.vcs.checkout"))
                                                         {
-                                                            long taskId = TaskConfigurationUtils.getUniqueId(tasks);
-                                                            
+                                                            long taskId = TaskConfigurationUtils.getUniqueId(newTasks);
+
                                                             boolean b = t.isEnabled();
-                                                            if (stateStates && t.getUserDescription()!=null 
-                                                                    && t.getUserDescription().length()>0)
+                                                            if (stateStates && t.getUserDescription() != null
+                                                                    && t.getUserDescription().length() > 0 && stateCache.get(t.getUserDescription()) != null)
+                                                            {
                                                                 b = stateCache.get(t.getUserDescription());
-                                                            
+                                                            }
+
                                                             TaskDefinition auxtask = new TaskDefinitionImpl(taskId,
                                                                     t.getPluginKey(),
                                                                     t.getUserDescription(),
@@ -242,13 +267,42 @@ public class TemplateConfigurationListener implements HibernateEventListener
 
                                                             auxtask.setFinalising(t.isFinalising());
 
+                                                            for (Requirement requirement : templateJob.getRequirementSet().getRequirements())
+                                                            {
+                                                                if (requirement.getOwnerId() == t.getId())
+                                                                {
+                                                                    RequirementImpl newRequirement = new RequirementImpl(requirement.getKey(), requirement.isRegexMatch(), requirement.getMatchValue(), requirement.isReadonly());
+                                                                    newRequirement.setOwnerId(taskId);
+
+                                                                    rs.addRequirement(newRequirement);
+                                                                }
+                                                            }
+
+                                                            log.debug("Generated new task: " + auxtask.toString());
+
                                                             newTasks.add(auxtask);
                                                         }
                                                     }
 
+                                                    requirementSetToClone = templateJob.getRequirementSet();
+                                                    for (Requirement requirement : requirementSetToClone.getRequirements())
+                                                    {
+                                                        if (requirement.getOwnerId() == -1)
+                                                        {
+                                                            RequirementImpl newRequirement = new RequirementImpl(requirement.getKey(), requirement.isRegexMatch(), requirement.getMatchValue(), requirement.isReadonly());
+                                                            rs.addRequirement(newRequirement);
+                                                        }
+                                                    }
+
+                                                    for (Requirement requirement : rs.getRequirements())
+                                                    {
+                                                        log.debug("Requirement list: " + requirement);
+                                                    }
+
+                                                    job.setRequirementSet(rs);
                                                     bd.setTaskDefinitions(newTasks);
                                                     buildDefinitionManager.savePlanAndDefinition(job, bd);
-
+                                                    planManager.savePlan(job);
                                                     log.warn("Final Task List Size: " + newTasks.size());
                                                 }
 
@@ -330,16 +384,6 @@ public class TemplateConfigurationListener implements HibernateEventListener
     public void setBuildDefinitionConverter(BuildDefinitionConverter buildDefinitionConverter)
     {
         this.buildDefinitionConverter = buildDefinitionConverter;
-    }
-
-    public TaskManager getTaskManager()
-    {
-        return taskManager;
-    }
-
-    public void setTaskManager(TaskManager taskManager)
-    {
-        this.taskManager = taskManager;
     }
 
     public TaskConfigurationService getTaskConfigurationService()

@@ -44,6 +44,6 @@
     <component-import key="transactionTemplate" interface="com.atlassian.sal.api.transaction.TransactionTemplate" />
     <component-import key="buildStrategyConfigurationService" interface="com.atlassian.bamboo.build.strategy.BuildStrategyConfigurationService" />
     <component-import key="variableDefinitionManager" interface="com.atlassian.bamboo.variable.VariableDefinitionManager" />
-
+    
     
 </atlassian-plugin>
