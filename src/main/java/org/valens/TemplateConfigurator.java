@@ -15,7 +15,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-
 package org.valens;
 
 import com.atlassian.bamboo.build.Job;
@@ -33,46 +32,60 @@ import org.slf4j.LoggerFactory;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-public class TemplateConfigurator extends BaseBuildConfigurationAwarePlugin implements MiscellaneousBuildConfigurationPlugin {
-     
+public class TemplateConfigurator extends BaseBuildConfigurationAwarePlugin implements MiscellaneousBuildConfigurationPlugin
+{
+
     private PlanManager planManager;
-    protected static final Logger log = LoggerFactory.getLogger( TemplateConfigurator.class );
-    
+    private String SELECTED_TEMPLATE_ENABLED = "custom.bamboo.template.enabled";
+
+    protected static final Logger log = LoggerFactory.getLogger(TemplateConfigurator.class);
+
     @Override
     public boolean isApplicableTo(@NotNull Plan plan)
     {
         return plan instanceof Job;
     }
-        
+
     @Override
-    public void populateContextForEdit(@NotNull Map<String, Object> context, @NotNull BuildConfiguration bc, @Nullable Plan plan) {
-        
+    public void populateContextForEdit(@NotNull Map<String, Object> context, @NotNull BuildConfiguration bc, @Nullable Plan plan)
+    {
+
         Map<String, String> result = Maps.newLinkedHashMap();
-        super.populateContextForEdit( context, bc, plan );
-        
-        if(planManager!=null){
-            for ( TopLevelPlan p : planManager.getAllPlansUnrestricted())
+        super.populateContextForEdit(context, bc, plan);
+
+        if (planManager != null)
+        {
+            for (TopLevelPlan p : planManager.getAllPlansUnrestricted())
             {
-                for(Job j : p.getAllJobs())
+                boolean state = true;
+                if (p.getBuildDefinition().getCustomConfiguration().get(SELECTED_TEMPLATE_ENABLED) == null
+                        || p.getBuildDefinition().getCustomConfiguration().get(SELECTED_TEMPLATE_ENABLED).toString().equalsIgnoreCase("false"))
                 {
-                    log.debug( "populateContextForEdit  " +  p.getProject() + " - " + p.getName());
-                    result.put( j.getName(), j.getKey());
+                    state = false;
                 }
-                
+                if (state)
+                {
+                    for (Job j : p.getAllJobs())
+                    {
+                        log.debug("populateContextForEdit  " + p.getProject() + " - " + p.getName());
+                        result.put(j.getName(), j.getKey());
+                    }
+                }
             }
-            
         }
-       
+
         context.put("templates", result);
     }
-            
-    public PlanManager getPlanManager() {
+
+    public PlanManager getPlanManager()
+    {
 
         return this.planManager;
     }
 
-    public void setPlanManager( PlanManager planManager ) {
-        log.debug( "setPlanManager  " +  planManager.toString());
+    public void setPlanManager(PlanManager planManager)
+    {
+        log.debug("setPlanManager  " + planManager.toString());
         this.planManager = planManager;
     }
 }

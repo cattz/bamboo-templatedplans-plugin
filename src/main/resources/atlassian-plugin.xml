@@ -31,6 +31,13 @@
         <resource type="freemarker" name="edit" location="preTemplateEdit.ftl"/>
         <resource type="freemarker" name="view" location="preTemplateView.ftl"/>
     </additionalBuildConfigurationPlugin> 
+    
+    <additionalBuildConfigurationPlugin key="templatedBuildAdminConfig" name="Templated Admin Build Configuration"
+        class="org.valens.TemplateAdminConfigurator">
+        <description>Plugin to template a plan</description>
+        <resource type="freemarker" name="edit" location="preTemplateAdminEdit.ftl"/>
+        <resource type="freemarker" name="view" location="preTemplateAdminView.ftl"/>
+    </additionalBuildConfigurationPlugin> 
   
     <!-- import from the product container -->
     <component-import key="planManager" interface="com.atlassian.bamboo.plan.PlanManager" />
