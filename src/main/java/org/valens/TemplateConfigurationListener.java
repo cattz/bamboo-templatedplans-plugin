@@ -275,19 +275,36 @@ public class TemplateConfigurationListener implements HibernateEventListener
             buildDefinitionManager.savePlanAndDefinition(job, bd);
             planManager.savePlan(job);
             dashboardCachingManager.removePlanFromCache(job.getPlanKey());
-            
+
             log.warn("Final Task List Size: " + newTasks.size());
         }
 
         if (templateJob.getArtifactDefinitions().size() > 0 && stateArtifacts)
         {
-            artifactDefinitionManager.removeArtifactDefinitionsByPlan(job);
-
-            List<ArtifactDefinition> artifacts = new ArrayList<ArtifactDefinition>();
+            for (ArtifactDefinition artifact : job.getArtifactDefinitions())
+            {
+                ArtifactDefinition ad = artifactDefinitionManager.findArtifactDefinition(templateJob, artifact.getName());
+                if(ad==null)
+                    job.getArtifactDefinitions().remove(artifact);
+            }
+            
+            List<ArtifactDefinition> artifacts = job.getArtifactDefinitions();
             for (ArtifactDefinition artifact : templateJob.getArtifactDefinitions())
             {
-                artifacts.add(convertDefinition(artifact, job));
+                ArtifactDefinition ad = artifactDefinitionManager.findArtifactDefinition(job, artifact.getName());
+                if (ad == null)
+                {
+                    artifacts.add(convertDefinition(artifact, job));
+                } else
+                {
+                    ad.setLocation(artifact.getLocation());
+                    ad.setCopyPattern(artifact.getCopyPattern());
+                    ad.setSharedArtifact(artifact.isSharedArtifact());
+
+                }
             }
+            
+            
 
             artifactDefinitionManager.saveArtifactDefinitions(artifacts);
         }
