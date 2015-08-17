@@ -16,6 +16,8 @@
  */
 package org.valens;
 
+import com.atlassian.bamboo.ServerLifecycleManager;
+import com.atlassian.bamboo.ServerLifecycleState;
 import com.atlassian.bamboo.event.BambooErrorEvent;
 import com.atlassian.bamboo.event.BuildConfigurationUpdatedEvent;
 import com.atlassian.bamboo.event.HibernateEventListener;
@@ -90,6 +92,17 @@ public class TemplateConfigurationListener implements HibernateEventListener
     private ArtifactDefinitionManager artifactDefinitionManager;
     private RepositoryConfigurationService repositoryConfigurationService;
     private DashboardCachingManager dashboardCachingManager;
+    private ServerLifecycleManager serverLifecycleManager;
+
+    public ServerLifecycleManager getServerLifecycleManager()
+    {
+        return serverLifecycleManager;
+    }
+
+    public void setServerLifecycleManager(ServerLifecycleManager serverLifecycleManager)
+    {
+        this.serverLifecycleManager = serverLifecycleManager;
+    }
 
     private ArtifactDefinition convertDefinition(ArtifactDefinition artifactDefinition, Job job)
     {
@@ -363,7 +376,27 @@ public class TemplateConfigurationListener implements HibernateEventListener
                 @Override
                 public Object doInTransaction()
                 {
-                    doReplication();
+                    serverLifecycleManager.pauseServer();
+                    int k = 0;
+                    while(serverLifecycleManager.getServerLifecycleState().equals(ServerLifecycleState.PAUSING) && k++ < 300)
+                    {
+                        try
+                        {
+                            Thread.sleep(1000);
+                        } catch (InterruptedException ex)
+                        {
+                            java.util.logging.Logger.getLogger(TemplateConfigurationListener.class.getName()).log(Level.SEVERE, null, ex);
+                        }
+                        
+                    }
+                    try{
+                        doReplication();
+                    }catch(Exception e)
+                    {
+                        log.warn("Received BuildConfigurationUpdatedEvent error " , e);
+                    }
+                    
+                    serverLifecycleManager.resumeServer();
                     return null;
                 }
             });

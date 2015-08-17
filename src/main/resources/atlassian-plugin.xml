@@ -52,5 +52,6 @@
     <component-import key="buildStrategyConfigurationService" interface="com.atlassian.bamboo.build.strategy.BuildStrategyConfigurationService" />
     <component-import key="variableDefinitionManager" interface="com.atlassian.bamboo.variable.VariableDefinitionManager" />
     <component-import key="dashboardCachingManager" interface="com.atlassian.bamboo.caching.DashboardCachingManager"/>
+    <component-import key="serverLifecycleManager" interface="com.atlassian.bamboo.ServerLifecycleManager"/>
     
 </atlassian-plugin>
